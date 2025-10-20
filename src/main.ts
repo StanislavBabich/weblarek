@@ -6,110 +6,163 @@ import { Api } from "./components/base/Api";
 import { ApiClient } from "./components/Service/ApiClient";
 import { apiProducts } from "./utils/data";
 import { API_URL } from "./utils/constants";
+import { EventEmitter } from "./components/base/Events";
+import { Modal } from "./components/Views/Modal";
+import { HeaderView } from "./components/Views/HeaderView";
+import { GalleryView } from "./components/Views/GalleryView";
+import { CardCatalogView } from "./components/Views/Card/CardCatalog";
+import { CardPreviewView } from "./components/Views/Card/CardPreview";
+import { BasketView } from "./components/Views/BasketView";
+import { OrderFormView } from "./components/Views/Forms/OrderForm";
+import { ContactsFormView } from "./components/Views/Forms/ContactsForm";
+import { OrderSuccessView } from "./components/Views/OrderSuccessView";
 
-// Экземпляры классов моделей
+// Шина событий
+const bus = new EventEmitter();
+
+// Модели
 const productsModel = new Products();
 const cartModel = new Cart();
 const buyerModel = new Buyer();
 
-// Инициализация реального Api и ApiClient
+// Api и ApiClient (оставлены, но в упрощённом режиме не используются)
 const api = new Api(API_URL);
 const apiClient = new ApiClient(api);
 
-console.log("=== Тест моделей на локальных данных (apiProducts) ===");
-console.log("Исходные данные apiProducts.items:", apiProducts.items);
+// Views
+const modal = new Modal("#modal-container", bus);
+const header = new HeaderView(".header", bus);
+const gallery = new GalleryView(".gallery", bus);
 
-//Тест: сохранить локальные тестовые данные в модель каталога
+// Показ ошибок через модалку
+bus.on("view:error:show", ({ node }: { node: HTMLElement }) => {
+  modal.open(node);
+});
+
+// Открыть карточку
+bus.on("view:card:open", ({ id }: { id: string }) => {
+  const item = productsModel.getItemById(id);
+  if (!item) return;
+  productsModel.setCurrent(item);
+});
+
+// Открыть корзину
+bus.on("view:basket:open", () => {
+  const basketView = new BasketView(cartModel, bus);
+  modal.open(basketView.render());
+});
+
+// Добавление в корзину
+bus.on("view:cart:add", ({ id }: { id: string }) => {
+  const item = productsModel.getItemById(id);
+  if (!item) return;
+  cartModel.add(item);
+  modal.close();
+});
+
+// Удаление из корзины
+bus.on("view:cart:remove", ({ id }: { id: string }) => {
+  const item = cartModel.getItems().find((i) => i.id === id);
+  if (item) cartModel.remove(item);
+});
+
+// Удаление из предпросмотра - закрываем модалку
+bus.on("view:cart:remove:preview", ({ id }: { id: string }) => {
+  const item = cartModel.getItems().find((i) => i.id === id);
+  if (item) cartModel.remove(item);
+  modal.close();
+});
+
+// Открыть форму оплаты
+bus.on("view:order:open", () => {
+  const orderForm = new OrderFormView(buyerModel, bus);
+  modal.open(orderForm.render());
+});
+
+// Открыть форму контактов
+bus.on("view:order:next", () => {
+  const contacts = new ContactsFormView(buyerModel, bus);
+  modal.open(contacts.render());
+});
+
+// Закрытие success
+bus.on("view:success:close", () => {
+  modal.close();
+});
+
+// Отправка заказа — упрощённо: просто показываем окно успеха
+bus.on("view:order:submit", async () => {
+  try {
+    const total = cartModel.getTotalPrice();
+    // Передаём null — в OrderSuccessView изображение не обязательно
+    const successView = new OrderSuccessView(total, null, bus);
+    modal.open(successView.render());
+
+    // Очистка состояния (по желанию)
+    cartModel.clear();
+    buyerModel.clear();
+  } catch (err) {
+    console.error("[main] show success failed ->", err);
+    const errNode = document.createElement("div");
+    errNode.className = "order-error";
+    errNode.textContent = "Произошла ошибка при отображении окна успеха";
+    modal.open(errNode);
+  }
+});
+
+// Подписки на модели
+productsModel.on("products:change", (items: any) => {
+  const nodes: HTMLElement[] = (items as any[]).map((it) => {
+    const card = new CardCatalogView(it, bus);
+    return card.render();
+  });
+  gallery.render(nodes);
+});
+
+productsModel.on("products:current", (item: any) => {
+  if (!item) return;
+  const preview = new CardPreviewView(item, cartModel, bus);
+  modal.open(preview.render());
+});
+
+cartModel.on("cart:change", () => {
+  header.setCount(cartModel.getCount());
+  const activeContent = modal.getContentElement();
+  const isBasketOpen = Boolean(
+    activeContent &&
+      (activeContent.classList.contains("basket") ||
+        (activeContent.matches && activeContent.matches(".basket")) ||
+        activeContent.querySelector(".basket"))
+  );
+
+  if (isBasketOpen) {
+    const basketView = new BasketView(cartModel, bus);
+    modal.replaceContent(basketView.render());
+  }
+});
+
+buyerModel.on("buyer:change", () => {
+  // Заглушка: можно реагировать на изменения покупателя при необходимости
+});
+
+// Инициализация
 productsModel.setItems(apiProducts.items);
-console.log(
-  "[Products] Массив товаров после setItems:",
-  productsModel.getItems()
-);
 
-const sampleId = apiProducts.items[0]?.id;
-if (sampleId) {
-  console.log("[Products] getItemById:", productsModel.getItemById(sampleId));
-  const sampleItem = productsModel.getItemById(sampleId) ?? null;
-  productsModel.setCurrent(sampleItem);
-  console.log("[Products] setCurrent/getCurrent:", productsModel.getCurrent());
-}
-
-//Тест: операции корзины
-const firstItem = apiProducts.items[0];
-if (firstItem) {
-  console.log("[Cart] Добавляем в корзину первый товар:", firstItem.id);
-  cartModel.add(firstItem);
-  console.log("[Cart] Товары в корзине:", cartModel.getItems());
-  console.log("[Cart] Количество:", cartModel.getCount());
-  console.log("[Cart] Общая цена:", cartModel.getTotalPrice());
-
-  console.log(
-    "[Cart] Попытка добавить тот же товар повторно (дубликаты не ожидаются):"
-  );
-  cartModel.add(firstItem);
-  console.log(
-    "[Cart] Товары после повторного добавления:",
-    cartModel.getItems()
-  );
-
-  console.log("[Cart] Удаляем товар из корзины:");
-  cartModel.remove(firstItem);
-  console.log("[Cart] Товары после удаления:", cartModel.getItems());
-  console.log(
-    "[Cart] has(firstItem.id) before add:",
-    cartModel.has(firstItem.id)
-  );
-  cartModel.add(firstItem);
-  console.log(
-    "[Cart] has(firstItem.id) after add:",
-    cartModel.has(firstItem.id)
-  );
-  cartModel.clear();
-  console.log(
-    "[Cart] getItems after clear (ожидается []):",
-    cartModel.getItems()
-  );
-}
-
-//Тесты для buyerModel
-console.log("=== Тест buyerModel ===");
-console.log("[Buyer] Начальные данные:", buyerModel.getAll());
-
-// Сохраняем по одному полю (демонстрация возможности partial set)
-buyerModel.set({ address: "г. Москва, ул. Примерная, 1" });
-console.log("[Buyer] После set(address):", buyerModel.getAll());
-
-// Установим способ оплаты и контактные данные
-buyerModel.setPayment("card");
-buyerModel.set({ email: "user@example.com", phone: "+7 (900) 000-00-00" });
-console.log(
-  "[Buyer] После установки payment/email/phone:",
-  buyerModel.getAll()
-);
-
-// Проверка валидации (в соответствии с ТЗ: поле валидно, если не пустое)
-const buyerErrors = buyerModel.validate();
-console.log(
-  "[Buyer] Результат валидации (пустой объект = нет ошибок):",
-  buyerErrors
-);
-
-// Очистка и проверка
-buyerModel.clear();
-console.log("[Buyer] После clear():", buyerModel.getAll());
-
-/* Запрос к серверу за актуальным каталогом */
 apiClient
   .fetchProducts()
   .then((serverItems) => {
-    console.log("[ApiClient] Получено с сервера items:", serverItems);
     productsModel.setItems(serverItems);
-    console.log(
-      "[Products] Массив товаров в productsModel после загрузки с сервера:",
-      productsModel.getItems()
-    );
   })
   .catch((err) => {
-    console.error("[ApiClient] Ошибка при получении товаров с сервера:", err);
+    console.error("Ошибка при получении товаров с сервера:", err);
   });
 
+// Экспорт для отладки
+// @ts-ignore
+window.__app = {
+  productsModel,
+  cartModel,
+  buyerModel,
+  bus,
+  modal,
+};

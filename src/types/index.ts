@@ -1,12 +1,15 @@
-export type ApiPostMethods = 'POST' | 'PUT' | 'DELETE';
+export type ApiPostMethods = "POST" | "PUT" | "DELETE";
 
 export interface IApi {
-    get<T extends object>(uri: string): Promise<T>;
-    post<T extends object>(uri: string, data: object, method?: ApiPostMethods): Promise<T>;
+  get<T extends object>(uri: string): Promise<T>;
+  post<T extends object>(
+    uri: string,
+    data: object,
+    method?: ApiPostMethods
+  ): Promise<T>;
 }
 // Тип способа оплаты
-export type TPayment = 'card' | 'cash';
-
+export type TPayment = "card" | "cash";
 
 // Интерфейс товара
 export interface IProduct {
@@ -18,10 +21,10 @@ export interface IProduct {
   price: number | null;
 }
 
- //Интерфейс покупателя (данные, собираемые при оформлении)
- //payment допускает пустую строку, пока способ оплаты не выбран
+//Интерфейс покупателя (данные, собираемые при оформлении)
+//payment допускает пустую строку, пока способ оплаты не выбран
 export interface IBuyer {
-  payment: TPayment | '';
+  payment: TPayment | "";
   email: string;
   phone: string;
   address: string;
@@ -32,4 +35,3 @@ export interface IOrderPayload {
   buyer: IBuyer;
   items: IProduct[];
 }
-

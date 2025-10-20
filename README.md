@@ -155,20 +155,20 @@ Presenter - презентер содержит основную логику п
 Конструктор:
 
 `constructor(initialItems: IProduct[] = [])`
-Параметр: `initialItems` — опциональный массив для инициализации.
+Параметр: `initialItems` - опциональный массив для инициализации.
 
 Поля:
 
-`private items: IProduct[]` — все товары.
-`private current: IProduct | null` — товар для детального просмотра.
+`private items: IProduct[]` - все товары.
+`private current: IProduct | null` - товар для детального просмотра.
 
 Методы:
 
-`setItems(items: IProduct[]): void` — сохранить массив товаров.
-`getItems(): IProduct[]` — получить массив всех товаров.
-`getItemById(id: string): IProduct | undefined` — получить товар по id.
-`setCurrent(item: IProduct | null): void` — сохранить товар для подробного просмотра.
-`getCurrent(): IProduct | null` — получить товар для подробного просмотра.
+`setItems(items: IProduct[]): void` - сохранить массив товаров.
+`getItems(): IProduct[]` - получить массив всех товаров.
+`getItemById(id: string): IProduct | undefined` - получить товар по id.
+`setCurrent(item: IProduct | null): void` - сохранить товар для подробного просмотра.
+`getCurrent(): IProduct | null` - получить товар для подробного просмотра.
 
 # Cart (корзина)
 Назначение:
@@ -179,19 +179,19 @@ Presenter - презентер содержит основную логику п
 
 `constructor(initialItems: IProduct[] = [])`
 
-Поля:
+Поле:
 
-`private items: IProduct[]` — товары в корзине.
+`private items: IProduct[]` - товары в корзине.
 
 Методы:
 
-`getItems(): IProduct[]` — получение массива товаров в корзине.
-`add(item: IProduct): void` — добавить товар (без дубликатов по id).
-`remove(item: IProduct): void` — удаление товара из корзины по id.
-`clear(): void` — очистка корзины.
-`getTotalPrice(): number` — получение общей стоимости всех товаров в корзине.
-`getCount(): number` — количество товаров в корзине.
-`has(id: string): boolean` — проверка наличия товара в корзине по id.
+`getItems(): IProduct[]` - получение массива товаров в корзине.
+`add(item: IProduct): void` - добавить товар (без дубликатов по id).
+`remove(item: IProduct): void` - удаление товара из корзины по id.
+`clear(): void` - очистка корзины.
+`getTotalPrice(): number` - получение общей стоимости всех товаров в корзине.
+`getCount(): number` - количество товаров в корзине.
+`has(id: string): boolean` - проверка наличия товара в корзине по id.
 
 # Buyer (данные покупателя)
 Назначение:
@@ -202,7 +202,7 @@ Presenter - презентер содержит основную логику п
 
 `constructor(initial?: Partial<IBuyer>)`
 
-Поля:
+Поле:
 
 `private data: IBuyer = {`
         `payment: '',`
@@ -214,11 +214,11 @@ Presenter - презентер содержит основную логику п
 
 Методы:
 
-`set(partial: Partial): void` — обновить поля без удаления других.
-`setPayment(payment: TPayment | ''): void` — установить способ оплаты.
-`getAll(): IBuyer` — получить все данные покупателя.
-`clear(): void` — очистить все данные покупателя.
-`validate(): Partial<Record<keyof IBuyer, string>>` — валидация данных покупателя.
+`set(partial: Partial): void` - обновить поля без удаления других.
+`setPayment(payment: TPayment | ''): void` - установить способ оплаты.
+`getAll(): IBuyer` - получить все данные покупателя.
+`clear(): void` - очистить все данные покупателя.
+`validate(): Partial<Record<keyof IBuyer, string>>` - валидация данных покупателя.
 
 ### Слой коммуникации (ApiClient)
 Назначение:
@@ -230,7 +230,7 @@ Presenter - презентер содержит основную логику п
 Конструктор:
 
 `constructor(api: IApi)`
-Параметр: `api` — экземпляр, реализующий `IApi` (например, src/components/base/Api).
+Параметр: `api` - экземпляр, реализующий `IApi` (например, src/components/base/Api).
 
 Поле:
 
@@ -240,4 +240,145 @@ Presenter - презентер содержит основную логику п
 
 `fetchProducts(): Promise<IProduct[]>` - получить массив товаров с сервера.
 `sendOrder(payload: IOrderPayload): Promise` - отправляет данные на сервер и возвращает ответ с серввера.
+
+### Слой представления (Views)
+
+# BasketViews (модальное окно корзины)
+Назначение:
+
+Рендерит содержимое корзины,
+Обрабатывает пользовательские действия внутри корзины,
+Возвращает готовый DOM-фрагмент, который вставляется в модалку..
+
+Конструктор:
+
+`constructor(cart: Cart, bus: EventEmitter)`
+
+Поля:
+
+`private root: HTMLElement;` - Корневой элемент шаблона корзины.
+`private listEl: HTMLElement;` - Элемент списка товаров в корзине.
+`private priceEl: HTMLElement;` - Элемент, где отображается общая цена.
+`private btn: HTMLButtonElement;` - Кнопка "Оформить" в корзине.
+`private cart: Cart;` - Модель корзины, откуда берём товары и суммы.
+`private bus: EventEmitter;` - Шина событий для взаимодействия с приложением.
+
+Метод:
+
+`render()` - cоздаёт DOM-ветку с текущим состоянием корзины и возвращает её.
+
+# GalleryView (отображение списка карточек)
+Назначение:
+
+Отвечает за отображение списка карточек.
+
+Конструктор:
+
+`constructor(selector: string, _bus?: EventEmitter)`
+
+Поле:
+
+`private root: HTMLElement;` - корневой DOM-элемент, в который рендерим карточки.
+`private readonly bus: EventEmitter;` - шина событий используется для уведомлений другого кода.
+
+Метод:
+
+`render(children: HTMLElement[])` - рендерит переданные дочерние элементы и сообщает шине о количестве элементов.
+
+# HeaderView (отображение верхней панели)
+Назначение:
+
+Отображает верхнюю панель, обрабатывает нажатие на корзину и счетчик корзины.
+
+Конструктор:
+
+`constructor(selector: string, bus: EventEmitter)`
+
+Поля:
+
+`private root: HTMLElement;` - корневой элемент хедера.
+`private basketButton: HTMLButtonElement;` - кнопка открытия корзины.
+`private counter: HTMLElement;` - счётчика товаров в корзине.
+`private bus: EventEmitter;` - шина событий для общения с приложением.
+
+Метод:
+
+`setCount` - обновляет отображаемое число в счётчике корзины.
+
+# Modal (модальные окна)
+Назначение:
+
+Управляет открытием/закрытием модалки,
+Вставляет/заменяет контент внутри модалки,
+Блокирует скролл страницы при открытой модалке.
+
+Конструктор:
+
+`constructor(selector: string, _bus?: unknown)`
+
+Поля:
+
+`private modal: HTMLElement;` - корневой элемент модального окна.
+`private container: HTMLElement;` - контейнер внутри модалки, куда вставляем содержимое.
+`private closeButton: HTMLElement;` - кнопка закрытия (крестик).
+
+Методы: 
+
+`open` - открывает модалку, вставляет контент, ставит класс активности и блокирует скролл страницы.
+`close` - закрывает модалку, очищает контейнер, снимает блокировку скролла.
+`getContentElement` - возвращает первый дочерний элемент контейнера или null, если его нет.
+`replaceContent` - заменяет содержимое контейнера.
+
+# OrderSuccessView (модалка с успешным заказом)
+Назначение:
+
+Отвечает за создание и предоставление DOM-модалки с успешным заказом.
+
+Конструктор:
+
+`constructor(total: number, _firstItemImage?: string | null, bus?: EventEmitter)`
+
+Поле:
+
+`private node: HTMLElement;` - DOM-узел, в который помещён клонированный шаблон модалки.
+
+Метод:
+
+`render(): HTMLElement` - возвращает готовый DOM-элемент модалки для вставки в документ.
+
+#### События в моделях
+
+`products:change` - Товары получены/обновлены; в main.ts подписывается и рендерит галерею.
+
+`products:current` - Сигнал открыть предпросмотр карточки продукта.
+
+`cart:change` - Модель корзины изменилась; слушатели обновляют UI (header, basket view и т.д.).
+
+#### События в представлениях
+
+`view:gallery:render` - Сообщает, что галерея обновлена и сколько элементов отрендерено.
+
+`view:modal:replace` - Контейнер модалки заменил содержимое.
+
+`view:modal:open` - Уведомление об открытии модалки.
+
+`view:modal:close` - Уведомление о закрытии модалки.
+
+`view:card:open` - Открыть предпросмотр товара с указанным id.
+
+`view:basket:open` - Открыть окно корзины в модалке.
+
+`view:cart:add` - Добавить товар в корзину.
+
+`view:cart:remove` - Удалить товар из корзины.
+
+`view:cart:remove:preview` - Удалить товар из корзины, закрытие превью/модалки; уведомляет приложение удалить товар и закрывает окно предпросмотра.
+
+`view:order:open` - Открыть форму выбора способа оплаты.
+
+`view:order:next` - Открыть форму контактов.
+
+`view:order:submit` - Сигнал о попытке отправки заказа.
+
+`view:success:close` - Закрыть окно успешного оформления
 
