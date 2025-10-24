@@ -5,29 +5,39 @@ import { EventEmitter } from "../base/Events";
 export class OrderSuccessView {
   // DOM-узел, в который помещён клонированный шаблон модалки
   private node: HTMLElement;
+  // Шина событий для общения с приложением
+  private bus?: EventEmitter;
 
-  constructor(
-    total: number,
-    _firstItemImage?: string | null,
-    bus?: EventEmitter
-  ) {
+  constructor(_firstItemImage?: string | null, bus?: EventEmitter) {
     this.node = cloneTemplate<HTMLElement>("#success");
-    const busRef = bus;
-    const desc = this.node.querySelector(
-      ".order-success__description"
-    ) as HTMLElement | null;
-    if (desc) {
-      desc.textContent = `Списано ${total} синапсов`;
-    }
-
-    const successBtn = this.node.querySelector(
+    this.bus = bus;
+    const closeBtn = this.node.querySelector<HTMLButtonElement>(
       ".order-success__close"
-    ) as HTMLButtonElement | null;
-    if (successBtn) {
-      successBtn.addEventListener("click", () => {
-        busRef?.emit("view:success:close");
+    );
+    if (closeBtn) {
+      closeBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        this.bus?.emit("view:success:close");
       });
     }
+
+    const actionBtn = this.node.querySelector<HTMLButtonElement>(
+      ".order-success__button, .order-success__action, button"
+    );
+    if (actionBtn) {
+      actionBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        this.bus?.emit("view:success:close");
+      });
+    }
+  }
+
+  // Устанавливает и отображает итоговую сумму списания в модалке
+  setTotal(total: number) {
+    const desc = this.node.querySelector<HTMLElement>(
+      ".order-success__description"
+    );
+    if (desc) desc.textContent = `Списано ${total} синапсов`;
   }
 
   // Возвращает готовый DOM-элемент модалки для вставки в документ

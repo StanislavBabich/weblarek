@@ -1,88 +1,170 @@
-import { cloneTemplate } from "../../../utils/utils";
+import { cloneTemplate, ensureElement } from "../../../utils/utils";
 import { BaseForm } from "./BaseForm";
-import { Buyer } from "../../../components/Models/Buyer";
 import { EventEmitter } from "../../../components/base/Events";
+import { IBuyer } from "../../../types";
 
-// OrderFormView - представление формы выбора способа оплаты и ввода адреса
-export class OrderFormView extends BaseForm<any> {
-  private buyer: Buyer;
+export class OrderFormView extends BaseForm {
+  // Шина событий для общения с моделью и презентером
   private bus: EventEmitter;
+  // Кнопка выбора оплаты картой
+  private cardBtn: HTMLButtonElement;
+  // Кнопка выбора оплаты наличными
+  private cashBtn: HTMLButtonElement;
+  // Поле ввода адреса доставки
+  private addressInput: HTMLInputElement;
+  // Кнопка перехода к следующему шагу оформления
+  private nextBtn: HTMLButtonElement;
+  // Элемент для отображения ошибок формы
+  private errorsEl: HTMLElement;
+  // Обёртка‑колбэк для подписки на событие buyer:change
+  private _onBuyerChange: (d: Partial<IBuyer>) => void;
+  // Обёртка‑колбэк для подписки на событие buyer:validation
+  private _onBuyerValidation: (p: {
+    errors: Partial<Record<keyof IBuyer, string>>;
+    valid: boolean;
+  }) => void;
+  // Локально храним выбранный способ оплаты
+  private localPayment = "";
+  // Локально храним введённый адрес
+  private localAddress = "";
 
-  constructor(buyer: Buyer, bus: EventEmitter) {
+  constructor(bus: EventEmitter) {
     const node = cloneTemplate<HTMLFormElement>("#order");
     super(node);
-    this.buyer = buyer;
     this.bus = bus;
 
+    this.cardBtn = ensureElement<HTMLButtonElement>(
+      'button[name="card"]',
+      this.container
+    );
+    this.cashBtn = ensureElement<HTMLButtonElement>(
+      'button[name="cash"]',
+      this.container
+    );
+    this.addressInput = ensureElement<HTMLInputElement>(
+      'input[name="address"]',
+      this.container
+    );
+    this.nextBtn = ensureElement<HTMLButtonElement>(
+      ".order__button",
+      this.container
+    );
+    this.errorsEl = ensureElement<HTMLElement>(".form__errors", this.container);
+
+    this.nextBtn.disabled = true;
+
+    this._onBuyerChange = this.onBuyerChange.bind(this);
+    this._onBuyerValidation = this.onBuyerValidation.bind(this);
+
     this.initListeners();
+
+    this.bus.on("buyer:change", this._onBuyerChange);
+    this.bus.on("buyer:validation", this._onBuyerValidation);
   }
 
-  // Навешивает обработчики выбора способа оплаты, ввода адреса и сабмита
+  // Навешивает локальные обработчики кликов и ввода
   private initListeners() {
-    const root = this.container as HTMLFormElement;
-    const cardBtn = root.querySelector(
-      'button[name="card"]'
-    ) as HTMLButtonElement;
-    const cashBtn = root.querySelector(
-      'button[name="cash"]'
-    ) as HTMLButtonElement;
-    const addressInput = root.querySelector(
-      'input[name="address"]'
-    ) as HTMLInputElement;
-    const nextBtn = root.querySelector(".order__button") as HTMLButtonElement;
-    const errors = root.querySelector(".form__errors") as HTMLElement;
-
-    // Проверка валидности текущих полей
-    const check = () => {
-      const data = this.buyer.getAll();
-      const addr = addressInput.value.trim();
-      const payment = data.payment;
-      const isValid = !!payment && addr.length > 0;
-      nextBtn.disabled = !isValid;
-      errors.textContent = "";
-      if (!payment) errors.textContent = "Выберите способ оплаты";
-      if (payment && addr.length === 0)
-        errors.textContent = "Укажите адрес доставки";
-    };
-
-    // Выбор оплаты картой
-    cardBtn.addEventListener("click", () => {
-      this.buyer.setPayment("card");
-      cardBtn.classList.add("button_alt-active");
-      cashBtn.classList.remove("button_alt-active");
-      check();
-    });
-
-    // Выбор оплаты наличными
-    cashBtn.addEventListener("click", () => {
-      this.buyer.setPayment("cash");
-      cashBtn.classList.add("button_alt-active");
-      cardBtn.classList.remove("button_alt-active");
-      check();
-    });
-
-    // Ввод адреса доставки
-    addressInput.addEventListener("input", () => {
-      this.buyer.set({ address: addressInput.value });
-      check();
-    });
-
-    // Сабмит формы валидируем payment и address
-    root.addEventListener("submit", (e) => {
+    this.cardBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      const errs = this.buyer.validate(["payment", "address"]);
-      if (Object.keys(errs).length === 0) {
-        // Сообщаем приложению что форма успешно пройдена
+      this.localPayment = "card";
+      this.cardBtn.classList.add("button_alt-active");
+      this.cashBtn.classList.remove("button_alt-active");
+      this.bus.emit("view:buyer:update", { payment: "card" });
+      this.updateLocalValidation();
+    });
+
+    this.cashBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      this.localPayment = "cash";
+      this.cashBtn.classList.add("button_alt-active");
+      this.cardBtn.classList.remove("button_alt-active");
+      this.bus.emit("view:buyer:update", { payment: "cash" });
+      this.updateLocalValidation();
+    });
+
+    this.addressInput.addEventListener("input", () => {
+      this.localAddress = this.addressInput.value.trim();
+      this.bus.emit("view:buyer:update", { address: this.addressInput.value });
+      this.updateLocalValidation();
+    });
+    (this.container as HTMLFormElement).addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!this.nextBtn.disabled) {
         this.bus.emit("view:order:next");
-      } else {
-        const first = Object.values(errs)[0] as string;
-        const errNode = root.querySelector(".form__errors") as HTMLElement;
-        errNode.textContent = String(first);
       }
     });
   }
 
-  // Возвращаем контейнер формы для рендера
+  // Обработчик события buyer:change - синхронизирует локальное состояние
+  // и элементы формы с данными модели (если модель изменилась извне)
+  private onBuyerChange(data: Partial<IBuyer>) {
+    if (typeof data.payment === "string") {
+      this.localPayment = data.payment;
+      if (data.payment === "card") {
+        this.cardBtn.classList.add("button_alt-active");
+        this.cashBtn.classList.remove("button_alt-active");
+      } else if (data.payment === "cash") {
+        this.cashBtn.classList.add("button_alt-active");
+        this.cardBtn.classList.remove("button_alt-active");
+      } else {
+        this.cardBtn.classList.remove("button_alt-active");
+        this.cashBtn.classList.remove("button_alt-active");
+      }
+    }
+    if (typeof data.address === "string") {
+      this.localAddress = data.address.trim();
+      this.addressInput.value = data.address;
+    }
+    this.updateLocalValidation();
+  }
+
+  // Обработчик события buyer:validation — отображает ошибки от модели
+  // и блокирует/разблокирует кнопку перехода при наличии критичных ошибок
+  private onBuyerValidation(payload: {
+    errors: Partial<Record<keyof IBuyer, string>>;
+    valid: boolean;
+  }) {
+    const { errors } = payload;
+
+    if (errors.payment || errors.address) {
+      this.errorsEl.textContent = String(
+        errors.payment || errors.address || ""
+      );
+      this.nextBtn.disabled = true;
+      return;
+    }
+
+    this.updateLocalValidation();
+  }
+
+  private updateLocalValidation() {
+    const hasPayment = Boolean(this.localPayment);
+    const hasAddress = Boolean(
+      this.localAddress && this.localAddress.length > 0
+    );
+
+    if (hasPayment && hasAddress) {
+      this.errorsEl.textContent = "";
+      this.nextBtn.disabled = false;
+      return;
+    }
+
+    this.nextBtn.disabled = true;
+
+    if (!hasPayment && hasAddress) {
+      this.errorsEl.textContent = "Укажите способ оплаты";
+      return;
+    }
+
+    if (hasPayment && !hasAddress) {
+      this.errorsEl.textContent = "Необходимо указать адрес";
+      return;
+    }
+
+    this.errorsEl.textContent = "";
+  }
+
+  // Возвращает корневой DOM‑элемент формы для рендера в модалке
   render() {
     return this.container;
   }

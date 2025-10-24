@@ -2,19 +2,21 @@ import { IProduct } from "../../types";
 import { EventEmitter } from "../base/Events";
 
 // Модель: Корзина
-export class Cart extends EventEmitter {
+export class Cart {
   // Товары в корзине
   private items: IProduct[] = [];
+  // Внешняя шина событий
+  private bus?: EventEmitter;
 
-  constructor(initialItems: IProduct[] = []) {
-    super();
+  constructor(bus?: EventEmitter, initialItems: IProduct[] = []) {
+    this.bus = bus;
     if (initialItems.length) {
       this.items = [...initialItems];
-      this.emit("cart:change", this.getItems());
+      this.bus?.emit("cart:change", this.getItems());
     }
   }
 
-  // Получение массива товаров в корзине
+  // Получение массива товаров в корзине (копия)
   getItems(): IProduct[] {
     return [...this.items];
   }
@@ -23,17 +25,17 @@ export class Cart extends EventEmitter {
   add(item: IProduct): void {
     if (!this.has(item.id)) {
       this.items.push(item);
-      this.emit("cart:change", this.getItems());
+      this.bus?.emit("cart:change", this.getItems());
     }
   }
 
   // Удаление товара из корзины по объекту товара
-  // Если товар удалён - эмитим "cart:change"
+  // Если товар удалён эмитим "cart:change"
   remove(item: IProduct): void {
     const prevLen = this.items.length;
     this.items = this.items.filter((i) => i.id !== item.id);
     if (this.items.length !== prevLen) {
-      this.emit("cart:change", this.getItems());
+      this.bus?.emit("cart:change", this.getItems());
     }
   }
 
@@ -41,7 +43,7 @@ export class Cart extends EventEmitter {
   clear(): void {
     if (this.items.length > 0) {
       this.items = [];
-      this.emit("cart:change", this.getItems());
+      this.bus?.emit("cart:change", this.getItems());
     }
   }
 

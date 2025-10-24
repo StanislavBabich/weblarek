@@ -1,7 +1,7 @@
 import { Component } from "../../base/Component";
 
-// Отвечает за предоставление единого контейнера для всех форм
-export abstract class BaseForm<T> extends Component<T> {
+//Базовый класс для форм.
+export abstract class BaseForm extends Component<HTMLElement> {
   protected constructor(container: HTMLElement) {
     super(container);
   }

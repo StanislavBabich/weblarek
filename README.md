@@ -154,13 +154,13 @@ Presenter - презентер содержит основную логику п
 
 Конструктор:
 
-`constructor(initialItems: IProduct[] = [])`
-Параметр: `initialItems` - опциональный массив для инициализации.
+`constructor(bus?: EventEmitter, initialItems: IProduct[] = [])`
 
 Поля:
 
 `private items: IProduct[]` - все товары.
 `private current: IProduct | null` - товар для детального просмотра.
+`private bus?: EventEmitter;` - внешняя шина событий.
 
 Методы:
 
@@ -177,11 +177,12 @@ Presenter - презентер содержит основную логику п
 
 Конструктор:
 
-`constructor(initialItems: IProduct[] = [])`
+`constructor(bus?: EventEmitter, initialItems: IProduct[] = [])`
 
-Поле:
+Поля:
 
 `private items: IProduct[]` - товары в корзине.
+`private bus?: EventEmitter` - внешняя шина событий.
 
 Методы:
 
@@ -209,16 +210,18 @@ Presenter - презентер содержит основную логику п
         `email: '',`
         `phone: '',`
         `address: ''`
-    `};`
-    Объект с полями payment, email, phone, address.
+    `};` - Объект с полями payment, email, phone, address.
+`private bus?: EventEmitter` - внешняя шина событий.
 
 Методы:
 
-`set(partial: Partial): void` - обновить поля без удаления других.
-`setPayment(payment: TPayment | ''): void` - установить способ оплаты.
+`set(partial: Partial): void` - обновить поля без удаления других и эмитить изменение + валидацию.
+`setPayment(payment: TPayment | ''): void` - установить способ оплаты и эмитить изменение + валидацию.
 `getAll(): IBuyer` - получить все данные покупателя.
-`clear(): void` - очистить все данные покупателя.
+`clear(): void` - очистить все данные покупателя и эмитить изменение + валидацию.
 `validate(): Partial<Record<keyof IBuyer, string>>` - валидация данных покупателя.
+`isValid` - возвращает true, если поля валидны.
+`private emitValidation` - внутренний хелпер эмитит событие валидации.
 
 ### Слой коммуникации (ApiClient)
 Назначение:
@@ -238,8 +241,8 @@ Presenter - презентер содержит основную логику п
 
 Методы:
 
-`fetchProducts(): Promise<IProduct[]>` - получить массив товаров с сервера.
-`sendOrder(payload: IOrderPayload): Promise` - отправляет данные на сервер и возвращает ответ с серввера.
+`async fetchProducts(): Promise<IProduct[]>` - получить массив товаров с сервера.
+`async sendOrder(payload: IOrderPayload): Promise<unknown>` - отправляет данные на сервер и возвращает ответ с серввера.
 
 ### Слой представления (Views)
 
@@ -260,12 +263,13 @@ Presenter - презентер содержит основную логику п
 `private listEl: HTMLElement;` - Элемент списка товаров в корзине.
 `private priceEl: HTMLElement;` - Элемент, где отображается общая цена.
 `private btn: HTMLButtonElement;` - Кнопка "Оформить" в корзине.
-`private cart: Cart;` - Модель корзины, откуда берём товары и суммы.
 `private bus: EventEmitter;` - Шина событий для взаимодействия с приложением.
 
 Метод:
 
-`render()` - cоздаёт DOM-ветку с текущим состоянием корзины и возвращает её.
+`render(items: HTMLElement[])` - Рендерит список элементов корзины или сообщение «Корзина пуста».
+`setTotalPrice(total: number)` - Обновляет отображение общей суммы заказа.
+`getRoot()` - Возвращает корневой DOM-элемент компонента для вставки в документ или модалку.
 
 # GalleryView (отображение списка карточек)
 Назначение:
@@ -274,12 +278,11 @@ Presenter - презентер содержит основную логику п
 
 Конструктор:
 
-`constructor(selector: string, _bus?: EventEmitter)`
+`constructor(selector: string)`
 
 Поле:
 
 `private root: HTMLElement;` - корневой DOM-элемент, в который рендерим карточки.
-`private readonly bus: EventEmitter;` - шина событий используется для уведомлений другого кода.
 
 Метод:
 
@@ -303,7 +306,7 @@ Presenter - презентер содержит основную логику п
 
 Метод:
 
-`setCount` - обновляет отображаемое число в счётчике корзины.
+`setCount(n: number)` - обновляет отображаемое число в счётчике корзины.
 
 # Modal (модальные окна)
 Назначение:
@@ -314,13 +317,14 @@ Presenter - презентер содержит основную логику п
 
 Конструктор:
 
-`constructor(selector: string, _bus?: unknown)`
+`constructor(selector: string, bus?: EventEmitter)`
 
 Поля:
 
 `private modal: HTMLElement;` - корневой элемент модального окна.
 `private container: HTMLElement;` - контейнер внутри модалки, куда вставляем содержимое.
 `private closeButton: HTMLElement;` - кнопка закрытия (крестик).
+`private bus?: EventEmitter;` - шина событий для общения с приложением.
 
 Методы: 
 
@@ -336,7 +340,7 @@ Presenter - презентер содержит основную логику п
 
 Конструктор:
 
-`constructor(total: number, _firstItemImage?: string | null, bus?: EventEmitter)`
+`constructor(_firstItemImage?: string | null, bus?: EventEmitter)`
 
 Поле:
 
@@ -344,7 +348,8 @@ Presenter - презентер содержит основную логику п
 
 Метод:
 
-`render(): HTMLElement` - возвращает готовый DOM-элемент модалки для вставки в документ.
+`setTotal(total: number)` - Устанавливает и отображает итоговую сумму списания в модалке.
+`render(): HTMLElement` - Возвращает готовый DOM-элемент модалки для вставки в документ.
 
 #### События в моделях
 
@@ -354,9 +359,11 @@ Presenter - презентер содержит основную логику п
 
 `cart:change` - Модель корзины изменилась; слушатели обновляют UI (header, basket view и т.д.).
 
-#### События в представлениях
+`buyer:change` - Модель покупателя изменилась; презентер рассылает текущее состояние покупателя для форм/View.
 
-`view:gallery:render` - Сообщает, что галерея обновлена и сколько элементов отрендерено.
+`buyer:validation` - Результат валидации покупателя { errors, valid }; формы используют для отображения ошибок и блокировки кнопок.
+
+#### События в представлениях
 
 `view:modal:replace` - Контейнер модалки заменил содержимое.
 
@@ -374,11 +381,15 @@ Presenter - презентер содержит основную логику п
 
 `view:cart:remove:preview` - Удалить товар из корзины, закрытие превью/модалки; уведомляет приложение удалить товар и закрывает окно предпросмотра.
 
+`view:contacts:submit` - Пользователь отправил вторую форму (контакты); презентер обрабатывает валидацию и отправку заказа.
+
 `view:order:open` - Открыть форму выбора способа оплаты.
 
 `view:order:next` - Открыть форму контактов.
 
-`view:order:submit` - Сигнал о попытке отправки заказа.
+`view:error:show` - Показать переданный HTML-узел ошибки в модальном окне.
 
-`view:success:close` - Закрыть окно успешного оформления
+`view:buyer:update` - Представления (формы) отправляют частичное обновление данных покупателя в модель (PATCH-подобное).
+
+`view:success:close` - Закрыть окно успешного оформления.
 

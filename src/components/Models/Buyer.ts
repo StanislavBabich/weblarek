@@ -2,37 +2,41 @@ import { IBuyer, TPayment } from "../../types";
 import { EventEmitter } from "../base/Events";
 
 // Модель: Данные покупателя
-export class Buyer extends EventEmitter {
+export class Buyer {
   private data: IBuyer = {
     payment: "",
     email: "",
     phone: "",
     address: "",
   };
+  // Внешняя шина событий (необязательная)
+  private bus?: EventEmitter;
 
-  constructor(initial?: Partial<IBuyer>) {
-    super();
+  constructor(bus?: EventEmitter, initial?: Partial<IBuyer>) {
+    this.bus = bus;
 
     if (initial) {
       this.set(initial);
-
-      this.emit("buyer:change", this.getAll());
+    } else {
+      this.emitValidation();
     }
   }
 
-  //Обновить поля без удаления других
+  // Обновить поля без удаления других и эмитить изменение + валидацию
   set(partial: Partial<IBuyer>): void {
     this.data = {
       ...this.data,
       ...partial,
     };
-    this.emit("buyer:change", this.getAll());
+    this.bus?.emit("buyer:change", this.getAll());
+    this.emitValidation();
   }
 
-  //Установить способ оплаты
+  // Установить способ оплаты и эмитить изменение + валидацию
   setPayment(payment: TPayment | ""): void {
     this.data.payment = payment;
-    this.emit("buyer:change", this.getAll());
+    this.bus?.emit("buyer:change", this.getAll());
+    this.emitValidation();
   }
 
   // Получить все данные покупателя
@@ -40,7 +44,7 @@ export class Buyer extends EventEmitter {
     return { ...this.data };
   }
 
-  // Очистить все данные покупателя
+  // Очистить все данные покупателя и эмитить изменение + валидацию
   clear(): void {
     this.data = {
       payment: "",
@@ -48,7 +52,8 @@ export class Buyer extends EventEmitter {
       phone: "",
       address: "",
     };
-    this.emit("buyer:change", this.getAll());
+    this.bus?.emit("buyer:change", this.getAll());
+    this.emitValidation();
   }
 
   // Валидация данных покупателя
@@ -82,5 +87,18 @@ export class Buyer extends EventEmitter {
       errors.phone = "Укажите телефон";
     }
     return errors;
+  }
+
+  // Возвращает true если поля валидны
+  isValid(fields?: (keyof IBuyer)[]): boolean {
+    const errors = this.validate(fields);
+    return Object.keys(errors).length === 0;
+  }
+
+  // Внутренний хелпер эмитит событие валидации
+  private emitValidation(fields?: (keyof IBuyer)[]) {
+    const errors = this.validate(fields);
+    const valid = Object.keys(errors).length === 0;
+    this.bus?.emit("buyer:validation", { errors, valid });
   }
 }

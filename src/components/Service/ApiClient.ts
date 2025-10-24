@@ -1,6 +1,6 @@
 import { IApi, IProduct, IOrderPayload } from "../../types";
 
-//Слой коммуникации (клиент для работы с бекендом)
+// Слой коммуникации (клиент для работы с бекендом)
 export class ApiClient {
   private api: IApi;
 
@@ -8,14 +8,13 @@ export class ApiClient {
     this.api = api;
   }
 
-  //Получить массив товаров с сервера
-  //Ожидается, что эндпоинт возвращает объект с полем items: IProduct[]
+  // Получить массив товаров с сервера
   async fetchProducts(): Promise<IProduct[]> {
     const res = await this.api.get<{ items: IProduct[] }>("/product/");
     return res.items ?? [];
   }
 
-  //Отправляет данные на сервер и возвращает ответ с серввера.
+  // Отправка заказа (простой метод)
   async sendOrder(payload: IOrderPayload): Promise<unknown> {
     return this.api.post("/order/", payload, "POST");
   }

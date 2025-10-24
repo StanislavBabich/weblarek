@@ -15,12 +15,14 @@ export class HeaderView {
   constructor(selector: string, bus: EventEmitter) {
     this.bus = bus;
     this.root = ensureElement<HTMLElement>(selector);
-    this.basketButton = this.root.querySelector(
-      ".header__basket"
-    ) as HTMLButtonElement;
-    this.counter = this.root.querySelector(
-      ".header__basket-counter"
-    ) as HTMLElement;
+    this.basketButton = ensureElement<HTMLButtonElement>(
+      ".header__basket",
+      this.root
+    );
+    this.counter = ensureElement<HTMLElement>(
+      ".header__basket-counter",
+      this.root
+    );
     this.basketButton.addEventListener("click", () => {
       this.bus.emit("view:basket:open");
     });
@@ -28,6 +30,7 @@ export class HeaderView {
 
   // Обновляет отображаемое число в счётчике корзины
   setCount(n: number) {
-    this.counter.textContent = String(n);
+    const num = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+    this.counter.textContent = String(num);
   }
 }
