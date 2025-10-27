@@ -95,10 +95,18 @@ export class Buyer {
     return Object.keys(errors).length === 0;
   }
 
+  // Публичный метод для принудительного запуска валидации и эмита её результата
+  triggerValidation(fields?: (keyof IBuyer)[]) {
+    this.emitValidation(fields);
+  }
+
   // Внутренний хелпер эмитит событие валидации
   private emitValidation(fields?: (keyof IBuyer)[]) {
     const errors = this.validate(fields);
     const valid = Object.keys(errors).length === 0;
+    // Стандартное событие валидации
     this.bus?.emit("buyer:validation", { errors, valid });
+    // Дополнительное событие для форм — в презентере его слушаем и дергаем setValidation
+    this.bus?.emit("formErrors:change", { errors, valid });
   }
 }

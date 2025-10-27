@@ -28,9 +28,8 @@ export class HeaderView {
     });
   }
 
-  // Обновляет отображаемое число в счётчике корзины
+  // Устанавливает отображаемое значение счётчика (без каких‑либо вычислений)
   setCount(n: number) {
-    const num = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
-    this.counter.textContent = String(num);
+    this.counter.textContent = String(n);
   }
 }

@@ -1,65 +1,72 @@
-import { cloneTemplate, setElementData } from "../../../utils/utils";
+import { setElementData } from "../../../utils/utils";
 import { CardBase } from "./CardBase";
-import { EventEmitter } from "../../base/Events";
 import { CDN_URL, categoryMap } from "../../../utils/constants";
 import { IProduct } from "../../../types";
 
 export class CardPreviewView extends CardBase<IProduct> {
-  // Шина событий для взаимодействия с презентером/приложением
-  private bus: EventEmitter;
-  // Необязательный коллбек для обработки клика по кнопке действия (добавить/удалить)
-  private onActionClick?: (id: string, action: "add" | "remove") => void;
+  private onActionClick?: (id: string) => void; // Колбек, вызываемый при клике на основную кнопку (добавление/удаление товара)
+  private buttonEl: HTMLButtonElement | null; //  Ссылка на DOM‑элемент кнопки действия внутри превью
+  private categoryEl: HTMLElement | null; // DOM‑элемент, отображающий категорию товара
+  private imageEl: HTMLImageElement | null; // DOM‑элемент изображения товара
+  private textEl: HTMLElement | null; // DOM‑элемент описания/текста товара
 
-  constructor(
-    bus: EventEmitter,
-    onActionClick?: (id: string, action: "add" | "remove") => void
-  ) {
-    const node = cloneTemplate<HTMLDivElement>("#card-preview");
-    super(node);
-    this.bus = bus;
+  constructor(container: HTMLElement, onActionClick?: (id: string) => void) {
+    super(container);
     this.onActionClick = onActionClick;
+
+    this.buttonEl = this.container.querySelector(
+      ".card__button"
+    ) as HTMLButtonElement | null;
+    this.categoryEl = this.container.querySelector(
+      ".card__category"
+    ) as HTMLElement | null;
+    this.imageEl = this.container.querySelector(
+      ".card__image"
+    ) as HTMLImageElement | null;
+    this.textEl = this.container.querySelector(
+      ".card__text"
+    ) as HTMLElement | null;
+
+    if (this.buttonEl && this.onActionClick) {
+      this.buttonEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = (this.container as HTMLElement).dataset.id;
+        if (!id) return;
+        this.onActionClick!(id);
+      });
+    }
   }
 
-  render(product: IProduct, inCart = false) {
+  // Презентер устанавливает надпись на кнопке
+  public setButtonLabel(label: string) {
+    if (this.buttonEl) this.buttonEl.textContent = label;
+  }
+
+  // Заполняет шаблон данными продукта и возвращает готовый DOM‑элемент
+  render(product: IProduct) {
     const el = this.container as HTMLElement;
 
     setElementData(el, { id: product.id });
 
-    const img = el.querySelector(".card__image") as HTMLImageElement;
-    img.src = CDN_URL + product.image;
-    img.alt = product.title;
-
-    const cat = el.querySelector(".card__category") as HTMLElement;
-    cat.textContent = product.category;
-    const mapClass = (categoryMap as any)[product.category];
-    cat.className = mapClass ? `card__category ${mapClass}` : "card__category";
-
-    (el.querySelector(".card__title") as HTMLElement).textContent =
-      product.title;
-    (el.querySelector(".card__text") as HTMLElement).textContent =
-      product.description ?? "";
-
-    const price = el.querySelector(".card__price") as HTMLElement;
-    price.textContent = product.price ? `${product.price} синапсов` : "—";
-
-    const button = el.querySelector(".card__button") as HTMLButtonElement;
-
-    if (product.price === null) {
-      button.disabled = true;
-      button.textContent = "Недоступно";
-      price.textContent = "Бесценно";
-      button.onclick = null;
-    } else {
-      button.disabled = false;
-      button.textContent = inCart ? "Удалить из корзины" : "В корзину";
-      button.onclick = () => {
-        const action: "add" | "remove" = inCart ? "remove" : "add";
-        if (this.onActionClick) this.onActionClick(product.id, action);
-        else if (action === "add")
-          this.bus.emit("view:cart:add", { id: product.id });
-        else this.bus.emit("view:cart:remove:preview", { id: product.id });
-      };
+    if (this.imageEl) {
+      this.imageEl.src = CDN_URL + product.image;
+      this.imageEl.alt = product.title;
     }
+
+    if (this.categoryEl) {
+      this.categoryEl.textContent = product.category;
+      const mapClass = (categoryMap as any)[product.category];
+      this.categoryEl.className = mapClass
+        ? `card__category ${mapClass}`
+        : "card__category";
+    }
+
+    if (this.titleEl) this.titleEl.textContent = product.title;
+    if (this.textEl) this.textEl.textContent = product.description ?? "";
+    if (this.priceEl)
+      this.priceEl.textContent = product.price
+        ? `${product.price} синапсов`
+        : "—";
 
     return el;
   }

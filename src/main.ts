@@ -1,4 +1,5 @@
 import "./scss/styles.scss";
+import { cloneTemplate } from "./utils/utils";
 import { Products } from "./components/Models/Products";
 import { Cart } from "./components/Models/Cart";
 import { Buyer } from "./components/Models/Buyer";
@@ -29,10 +30,34 @@ const modal = new Modal("#modal-container", bus); // менеджер модал
 const header = new HeaderView(".header", bus); // header view
 const gallery = new GalleryView(".gallery"); // контейнер галереи
 
+// Прототипы клонируемых шаблонов (клонируем один раз в начале модуля)
+// далее для каждого элемента используем proto.cloneNode(true)
+const protoCardCatalog = cloneTemplate<HTMLButtonElement>("#card-catalog");
+const protoCardPreview = cloneTemplate<HTMLDivElement>("#card-preview");
+const protoCardBasket = cloneTemplate<HTMLLIElement>("#card-basket");
+
+// Хранилища текущих обработчиков, чтобы отписываться корректно
+let currentOrderHandlers: {
+  onChange?: (d: Partial<any>) => void;
+  onFormErrors?: (payload: {
+    errors: Partial<Record<string, string>>;
+    valid: boolean;
+  }) => void;
+} = {};
+
+let currentContactsHandlers: {
+  onChange?: (d: Partial<any>) => void;
+  onFormErrors?: (payload: {
+    errors: Partial<Record<string, string>>;
+    valid: boolean;
+  }) => void;
+} = {};
+
 // Рендер каталога при обновлении списка товаров
 bus.on("products:change", (items: any[]) => {
   const nodes = (items || []).map((it) => {
-    const c = new CardCatalogView(bus, (id) =>
+    const node = protoCardCatalog.cloneNode(true) as HTMLButtonElement;
+    const c = new CardCatalogView(node, bus, (id) =>
       bus.emit("view:card:open", { id })
     );
     return c.render(it);
@@ -49,11 +74,16 @@ bus.on("view:card:open", ({ id }: { id: string }) => {
 // Открыть превью текущего товара
 bus.on("products:current", (item: any) => {
   if (!item) return;
-  const preview = new CardPreviewView(bus, (id, action) => {
-    if (action === "add") bus.emit("view:cart:add", { id });
-    else bus.emit("view:cart:remove:preview", { id });
+  const node = protoCardPreview.cloneNode(true) as HTMLDivElement;
+  const preview = new CardPreviewView(node, (id) => {
+    if (cartModel.has(id)) bus.emit("view:cart:remove:preview", { id });
+    else bus.emit("view:cart:add", { id });
   });
-  modal.open(preview.render(item, cartModel.has(item.id)));
+
+  preview.setButtonLabel(
+    cartModel.has(item.id) ? "Удалить из корзины" : "В корзину"
+  );
+  modal.open(preview.render(item));
 });
 
 // Добавить товар в корзину по id
@@ -78,7 +108,7 @@ bus.on("view:cart:remove:preview", ({ id }: { id: string }) => {
   modal.close();
 });
 
-// Обновить счётчик и, если корзина открыта, её содержимое
+// Обновить счётчик и если корзина открыта её содержимое
 bus.on("cart:change", () => {
   header.setCount(cartModel.getCount());
   const active = modal.getContentElement();
@@ -91,10 +121,11 @@ bus.on("cart:change", () => {
   if (!isBasketOpen) return;
   const v = new BasketView(bus);
   const nodes = cartModel.getItems().map((product, idx) => {
-    const c = new CardBasketView(idx, bus, (id) =>
+    const node = protoCardBasket.cloneNode(true) as HTMLLIElement;
+    const c = new CardBasketView(node, bus, (id) =>
       bus.emit("view:card:open", { id })
     );
-    return c.render(product);
+    return c.render(product, idx);
   });
   v.render(nodes);
   v.setTotalPrice(cartModel.getTotalPrice());
@@ -105,10 +136,11 @@ bus.on("cart:change", () => {
 bus.on("view:basket:open", () => {
   const v = new BasketView(bus);
   const nodes = cartModel.getItems().map((product, idx) => {
-    const c = new CardBasketView(idx, bus, (id) =>
+    const node = protoCardBasket.cloneNode(true) as HTMLLIElement;
+    const c = new CardBasketView(node, bus, (id) =>
       bus.emit("view:card:open", { id })
     );
-    return c.render(product);
+    return c.render(product, idx);
   });
   v.render(nodes);
   v.setTotalPrice(cartModel.getTotalPrice());
@@ -118,8 +150,46 @@ bus.on("view:basket:open", () => {
 // Открыть форму выбора способа оплаты
 bus.on("view:order:open", () => {
   const f = new OrderFormView(bus);
-  bus.emit("buyer:change", buyerModel.getAll());
+
+  // Синхронизируем форму с моделью напрямую из презентера
+  f.setData(buyerModel.getAll());
+  // Пока не показываем ошибок - форма отрисована в начальном состоянии
+  f.setValidation({ errors: {}, valid: false });
   modal.open(f.render());
+
+  // Перед тем как подписываться снимем предыдущие обработчики если они есть
+  if (currentOrderHandlers.onChange) {
+    bus.off("buyer:change", currentOrderHandlers.onChange);
+  }
+  if (currentOrderHandlers.onFormErrors) {
+    bus.off("formErrors:change", currentOrderHandlers.onFormErrors);
+  }
+
+  // Подписываем презентерские обработчики для текущей формы
+  const onChange = (d: Partial<any>) => {
+    f.setData(d);
+  };
+
+  const onFormErrors = (payload: {
+    errors: Partial<Record<string, string>>;
+    valid: boolean;
+  }) => {
+    // Используем payload оставляем только поля формы заказа
+    const filtered: Partial<Record<string, string>> = {};
+    if (payload.errors && (payload.errors as any).payment)
+      filtered.payment = (payload.errors as any).payment;
+    if (payload.errors && (payload.errors as any).address)
+      filtered.address = (payload.errors as any).address;
+    const localValid = Object.keys(filtered).length === 0;
+    f.setValidation({ errors: filtered, valid: localValid });
+  };
+
+  // Сохраняем ссылки чтобы иметь возможность отписаться позже
+  currentOrderHandlers.onChange = onChange;
+  currentOrderHandlers.onFormErrors = onFormErrors;
+
+  bus.on("buyer:change", onChange);
+  bus.on("formErrors:change", onFormErrors);
 });
 
 // Показать кастомную ошибку в модалке
@@ -129,80 +199,182 @@ bus.on("view:error:show", ({ node }: { node: HTMLElement }) =>
 
 // Проверить оплату/адрес и открыть форму контактов
 function openContactsIfOrderValid() {
-  const errs = buyerModel.validate(["payment", "address"]);
-  const valid = Object.keys(errs).length === 0;
-  bus.emit("buyer:validation", { errors: errs, valid });
-  if (!valid) return;
-  const c = new ContactsFormView(bus);
-  bus.emit("buyer:change", buyerModel.getAll());
-  modal.open(c.render());
+  // Подпишемся один раз на результат валидации модели для проверки полей payment + address
+  const checkHandler = (validationPayload: {
+    errors: Partial<Record<string, string>>;
+    valid: boolean;
+  }) => {
+    // Отключаем этот одноразовый обработчик
+    bus.off("formErrors:change", checkHandler);
+
+    // Оставляем только поля payment/address
+    const filtered: Partial<Record<string, string>> = {};
+    if (validationPayload.errors && (validationPayload.errors as any).payment)
+      filtered.payment = (validationPayload.errors as any).payment;
+    if (validationPayload.errors && (validationPayload.errors as any).address)
+      filtered.address = (validationPayload.errors as any).address;
+
+    const localValid = Object.keys(filtered).length === 0;
+    if (!localValid) return;
+
+    // Если валидно открываем форму контактов и подписываемся на её события
+    const c = new ContactsFormView(bus);
+    c.setData(buyerModel.getAll());
+    c.setValidation({ errors: {}, valid: false });
+    modal.open(c.render());
+
+    // Перед тем как подписываться снимем предыдущие обработчики для контактов если они есть
+    if (currentContactsHandlers.onChange) {
+      bus.off("buyer:change", currentContactsHandlers.onChange);
+    }
+    if (currentContactsHandlers.onFormErrors) {
+      bus.off("formErrors:change", currentContactsHandlers.onFormErrors);
+    }
+
+    const onChange = (d: Partial<any>) => {
+      c.setData(d);
+    };
+
+    const onFormErrors = (payload2: {
+      errors: Partial<Record<string, string>>;
+      valid: boolean;
+    }) => {
+      const filtered2: Partial<Record<string, string>> = {};
+      if (payload2.errors && (payload2.errors as any).email)
+        filtered2.email = (payload2.errors as any).email;
+      if (payload2.errors && (payload2.errors as any).phone)
+        filtered2.phone = (payload2.errors as any).phone;
+      const localValid2 = Object.keys(filtered2).length === 0;
+      c.setValidation({ errors: filtered2, valid: localValid2 });
+    };
+
+    currentContactsHandlers.onChange = onChange;
+    currentContactsHandlers.onFormErrors = onFormErrors;
+
+    bus.on("buyer:change", onChange);
+    bus.on("formErrors:change", onFormErrors);
+    buyerModel.triggerValidation(["email", "phone"]);
+  };
+
+  // Подписываем одноразово
+  bus.on("formErrors:change", checkHandler);
+  buyerModel.triggerValidation(["payment", "address"]);
 }
 bus.on("view:order:next", openContactsIfOrderValid);
 bus.on("view:order:submit", openContactsIfOrderValid);
 
 // Частичное обновление данных покупателя из форм
-bus.on("view:buyer:update", (p: Partial<any>) => buyerModel.set(p));
+// Buyer.set сам эмитит buyer:change и formErrors:change (модель)
+bus.on("view:buyer:update", (p: Partial<any>) => {
+  buyerModel.set(p);
+});
 
 // Обработка отправки контактов и оформление заказа
 bus.on("view:contacts:submit", async () => {
-  const b = buyerModel.getAll();
-  const errors: Partial<Record<keyof typeof b, string>> = {};
-  if (!b.payment) errors.payment = "Не указан способ оплаты";
-  if (!b.email || !b.email.trim()) errors.email = "Введите Email";
-  if (!b.phone || !b.phone.trim()) errors.phone = "Введите телефон";
-  if (!b.address || !b.address.trim()) errors.address = "Укажите адрес";
-  const valid = Object.keys(errors).length === 0;
-  bus.emit("buyer:validation", { errors, valid });
-  if (!valid) {
-    if (errors.payment) {
-      const f = new OrderFormView(bus);
-      bus.emit("buyer:change", buyerModel.getAll());
-      modal.open(f.render());
+  // Подпишемся одноразово на результат валидации модели по всем полям
+  const validationHandler = async (validationResult: {
+    errors: Partial<Record<string, string>>;
+    valid: boolean;
+  }) => {
+    // Отключаем этот одноразовый обработчик
+    bus.off("formErrors:change", validationHandler);
+
+    const errors = (validationResult.errors || {}) as Partial<
+      Record<string, string>
+    >;
+    const valid = validationResult.valid;
+
+    if (!valid) {
+      // Если есть критичная ошибка по payment открываем форму заказа и отображаем ошибки именно по payment/address
+      if (errors.payment) {
+        // Открываем форму заказа и подписываемся на её события так же как в handler для view:order:open
+        const f = new OrderFormView(bus);
+        f.setData(buyerModel.getAll());
+        f.setValidation({ errors: {}, valid: false });
+        modal.open(f.render());
+
+        // Снимаем и ставим обработчик чтобы не накапливались
+        if (currentOrderHandlers.onChange) {
+          bus.off("buyer:change", currentOrderHandlers.onChange);
+        }
+        if (currentOrderHandlers.onFormErrors) {
+          bus.off("formErrors:change", currentOrderHandlers.onFormErrors);
+        }
+
+        const onChange = (d: Partial<any>) => f.setData(d);
+        const onFormErrors = (payload2: {
+          errors: Partial<Record<string, string>>;
+          valid: boolean;
+        }) => {
+          const filtered: Partial<Record<string, string>> = {};
+          if (payload2.errors && (payload2.errors as any).payment)
+            filtered.payment = (payload2.errors as any).payment;
+          if (payload2.errors && (payload2.errors as any).address)
+            filtered.address = (payload2.errors as any).address;
+          const localValid = Object.keys(filtered).length === 0;
+          f.setValidation({ errors: filtered, valid: localValid });
+        };
+
+        currentOrderHandlers.onChange = onChange;
+        currentOrderHandlers.onFormErrors = onFormErrors;
+
+        bus.on("buyer:change", onChange);
+        bus.on("formErrors:change", onFormErrors);
+
+        // Инициируем валидацию для формы заказа чтобы она получила текущее состояние
+        buyerModel.triggerValidation(["payment", "address"]);
+      }
+      return;
     }
-    return;
-  }
 
-  const items = cartModel.getItems().map((it) => String(it.id));
-  const payload = {
-    payment: b.payment ?? null,
-    email: b.email ?? "",
-    phone: b.phone ?? "",
-    address: b.address ?? "",
-    items,
-    total: cartModel.getTotalPrice(),
-    count: items.length,
-  } as any;
+    // Если валидно продолжаем отправку заказа
+    const b = buyerModel.getAll();
+    const items = cartModel.getItems().map((it) => String(it.id));
+    const orderPayload = {
+      payment: b.payment ?? null,
+      email: b.email ?? "",
+      phone: b.phone ?? "",
+      address: b.address ?? "",
+      items,
+      total: cartModel.getTotalPrice(),
+      count: items.length,
+    } as any;
 
-  try {
-    const res = await apiClient.sendOrder(payload);
-    let totalFromServer: number | undefined;
-    if (res && typeof res === "object")
-      totalFromServer =
-        (res as any).total ?? (res as any).amount ?? (res as any).paid;
-    else if (typeof res === "number") totalFromServer = res;
-    if (totalFromServer == null) totalFromServer = cartModel.getTotalPrice();
+    try {
+      const res = await apiClient.sendOrder(orderPayload);
+      let totalFromServer: number | undefined;
+      if (res && typeof res === "object")
+        totalFromServer =
+          (res as any).total ?? (res as any).amount ?? (res as any).paid;
+      else if (typeof res === "number") totalFromServer = res;
+      if (totalFromServer == null) totalFromServer = cartModel.getTotalPrice();
 
-    cartModel.clear();
-    buyerModel.clear();
-    bus.emit("cart:change", cartModel.getItems());
-    bus.emit("buyer:change", buyerModel.getAll());
+      cartModel.clear();
+      buyerModel.clear();
+      bus.emit("cart:change", cartModel.getItems());
+      bus.emit("buyer:change", buyerModel.getAll());
 
-    const sv = new OrderSuccessView(null, bus);
-    sv.setTotal(totalFromServer);
-    modal.open(sv.render());
+      const sv = new OrderSuccessView(null, bus);
+      sv.setTotal(totalFromServer);
+      modal.open(sv.render());
 
-    const onClose = () => {
-      modal.close();
-      bus.off("view:success:close", onClose as any);
-    };
-    bus.on("view:success:close", onClose as any);
-  } catch (err) {
-    const node = document.createElement("div");
-    node.className = "order-error";
-    node.textContent =
-      typeof err === "object" ? JSON.stringify(err) : String(err);
-    modal.open(node);
-  }
+      const onClose = () => {
+        modal.close();
+        bus.off("view:success:close", onClose as any);
+      };
+      bus.on("view:success:close", onClose as any);
+    } catch (err) {
+      const node = document.createElement("div");
+      node.className = "order-error";
+      node.textContent =
+        typeof err === "object" ? JSON.stringify(err) : String(err);
+      modal.open(node);
+    }
+  };
+
+  // Подписываем одноразово и триггерим валидацию модели
+  bus.on("formErrors:change", validationHandler);
+  buyerModel.triggerValidation();
 });
 
 productsModel.setItems(apiProducts.items); // предзаполняем товары из набора
