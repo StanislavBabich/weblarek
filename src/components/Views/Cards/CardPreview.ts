@@ -63,10 +63,20 @@ export class CardPreviewView extends CardBase<IProduct> {
 
     if (this.titleEl) this.titleEl.textContent = product.title;
     if (this.textEl) this.textEl.textContent = product.description ?? "";
-    if (this.priceEl)
-      this.priceEl.textContent = product.price
-        ? `${product.price} синапсов`
-        : "—";
+    if (this.priceEl) {
+      if (product.price) {
+        this.priceEl.textContent = `${product.price} синапсов`;
+        if (this.buttonEl) {
+          this.buttonEl.disabled = false;
+        }
+      } else {
+        this.priceEl.textContent = "Бесценно";
+        if (this.buttonEl) {
+          this.buttonEl.disabled = true;
+          this.buttonEl.textContent = "Недоступно";
+        }
+      }
+    }
 
     return el;
   }

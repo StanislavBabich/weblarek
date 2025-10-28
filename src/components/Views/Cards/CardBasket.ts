@@ -8,6 +8,7 @@ export class CardBasketView extends CardBase<IProduct> {
   private bus: EventEmitter; // Локальная шина событий для взаимодействия с презентером
   private onCardClick?: (id: string) => void; // Необязательный коллбек вызываемый при клике по карточке
   private indexEl: HTMLElement | null; // Индекс строки в списке корзины
+  private btn: HTMLButtonElement | null; // Кнопка удаления из корзины
 
   constructor(
     container: HTMLElement,
@@ -21,6 +22,10 @@ export class CardBasketView extends CardBase<IProduct> {
     this.indexEl = this.container.querySelector(
       ".basket__item-index"
     ) as HTMLElement | null;
+
+    this.btn = this.container.querySelector(
+      ".basket__item-delete"
+    ) as HTMLButtonElement | null;
 
     this.container.addEventListener("click", () => {
       const id = (this.container as HTMLElement).dataset.id;
@@ -42,11 +47,8 @@ export class CardBasketView extends CardBase<IProduct> {
     if (this.priceEl)
       this.priceEl.textContent = `${product.price ?? 0} синапсов`;
 
-    const btn = el.querySelector(
-      ".basket__item-delete"
-    ) as HTMLButtonElement | null;
-    if (btn) {
-      btn.onclick = (e) => {
+    if (this.btn) {
+      this.btn.onclick = (e) => {
         e.stopPropagation();
         this.bus.emit("view:cart:remove", { id: product.id });
       };
